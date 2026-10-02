@@ -1,0 +1,123 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+// Per-shop configuration for the optimizer and its checkout carrier service.
+model ShopSettings {
+  id                 String   @id @default(cuid())
+  shop               String   @unique
+  callbackToken      String   @unique // secret path segment for the carrier callback URL
+  carrierServiceId   String?
+  checkoutActive     Boolean  @default(false)
+  provider           String   @default("SIMULATED") // SIMULATED | EASYPOST
+  easypostApiKey     String?
+  baselineCarrier    String   @default("UPS") // carrier the merchant used before; savings are measured against it
+  enabledCarriers    String   @default("USPS,UPS,FEDEX,DHL")
+  enabledTiers       String   @default("ECONOMY,STANDARD,EXPRESS")
+  routingMode        String   @default("CHEAPEST_LOCATION") // CHEAPEST_LOCATION | SHOPIFY_ORIGIN
+  stockAwareRouting  Boolean  @default(true)
+  showCarrierName    Boolean  @default(true)
+  markupPercent      Float    @default(0)
+  handlingFee        Float    @default(0)
+  boxLengthIn        Float    @default(12)
+  boxWidthIn         Float    @default(9)
+  boxHeightIn        Float    @default(6)
+  packagingGrams     Int      @default(150)
+  cacheTtlSeconds    Int      @default(900)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// Shopify locations the optimizer may ship from, synced from the Admin API so the
+// checkout callback never has to call Shopify to know its origins.
+model ShipOrigin {
+  id          String   @id @default(cuid())
+  shop        String
+  locationId  String
+  name        String
+  city        String?
+  province    String?
+  zip         String?
+  countryCode String
+  enabled     Boolean  @default(true)
+  syncedAt    DateTime @default(now())
+
+  @@unique([shop, locationId])
+}
+
+// Carrier preference rules, evaluated in ascending priority for every rate request.
+model ShippingRule {
+  id           String   @id @default(cuid())
+  shop         String
+  name         String
+  priority     Int      @default(100)
+  enabled      Boolean  @default(true)
+  countries    String? // comma-separated ISO codes; empty = any destination
+  minWeightG   Int?
+  maxWeightG   Int?
+  minSubtotal  Float?
+  maxSubtotal  Float?
+  action       String // EXCLUDE_CARRIER | PREFER_CARRIER | HIDE_TIER | FREE_SHIPPING | ADJUST_PRICE
+  carrier      String?
+  tier         String?
+  value        Float? // tolerance % for PREFER_CARRIER, price change % for ADJUST_PRICE
+  createdAt    DateTime @default(now())
+
+  @@index([shop])
+}
+
+// One row per optimized rate request (checkout or calculator), used for analytics.
+model RateQuote {
+  id             String   @id @default(cuid())
+  shop           String
+  source         String // CHECKOUT | CALCULATOR
+  destCountry    String
+  destZip        String?
+  weightGrams    Int
+  originName     String?
+  tier           String
+  carrier        String
+  service        String
+  cost           Float
+  baselineCost   Float
+  savings        Float
+  customerPrice  Float
+  quotesCompared Int
+  cacheHit       Boolean  @default(false)
+  latencyMs      Int
+  currency       String   @default("USD")
+  createdAt      DateTime @default(now())
+
+  @@index([shop, createdAt])
+}
